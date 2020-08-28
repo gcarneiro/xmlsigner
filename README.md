@@ -35,11 +35,11 @@ Execute:
 
 ```
 cd /usr/local/bin
-git clone https://github.com/jonasrgoes/xmlsigner.git
+git clone https://github.com/gcarneiro/xmlsigner.git
 cd xmlsigner
 chmod +x xmlsigner
 ```
- 
+
 #### Se precisar compilar o script em Java execute:
 
 ```
