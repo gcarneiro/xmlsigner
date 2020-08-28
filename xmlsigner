@@ -1,0 +1,243 @@
+#!/bin/bash +x
+
+umask 0002
+
+readonly NC='\033[0m'
+readonly RED='\033[0;31m' 
+readonly DIR_SCRIPT=$(dirname "$0")
+readonly FMT_DATE="+%y%m%d%H%M%S"
+readonly CMD_DATE="LC_ALL=pt_BR.utf8 date ${FMT_DATE}"
+readonly OUTPUT_DIR=~/xmlsigner-output
+  
+[ ! -d "${OUTPUT_DIR}" ] && mkdir -pv "${OUTPUT_DIR}"
+
+#######################
+## DEPENDÊNCIAS
+###################
+
+## JAVA
+if ! [ -x "$(command -v java)" ]; then
+  echo "Comando 'java' nao instalado!"
+  exit 2
+fi
+
+#######################
+## FUNÇÕES
+###################
+
+help() {
+cat << EOF
+Como usar: ${0##*/} [-h] ou [-s PFX SENHA XML LOCALIZADOR] ou [-x PFX SENHA LOCALIZADOR] ou [-p XML LOCALIZADOR]
+Assine um XML com um Certificado PFX. Verifique um certificado. Verifique um XML assinado.
+
+    -h | --help                             exibe esta ajuda.
+    -x | --pfx    PFX SENHA LOCALIZADOR     verifica um certificado PFX.
+    -s | --sign   PFX SENHA XML LOCALIZADOR assina um arquivo XML com o CERTIFICADO PFX
+                                            caso ainda não esteja assinado.
+EOF
+}
+
+## FUNÇÃO: ASSINA UM ARQUIVO XML COM CERTIFICADO PFX
+##
+## xml_sign CERT PASSWORD XML LOCALIZADOR
+##
+## retorna 
+##	1 se assinado
+##	0 se falhou
+##
+function xml_sign {
+  CERT="$1"
+  PASSWORD="$2"
+  XML="$3"
+  LOCALIZADOR="$4"
+  JSON="${OUTPUT_DIR}/${LOCALIZADOR}.json"
+  XML_SIGNED="${OUTPUT_DIR}/${LOCALIZADOR}.xml"
+  XML_CONTENT=`cat ${XML}`
+  pfx_owner "${CERT}" "${PASSWORD}"
+
+  if [ ! -s "${XML}" ]
+  then
+    json "falha" "" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "O arquivo nao existe" "${LOCALIZADOR}"
+    return 0
+  fi
+
+  if [ ! -s "${XML_SIGNED}" ]
+  then
+    pfx_json=`pfx_check "${CERT}" "${PASSWORD}" "${LOCALIZADOR}"`
+    pfx_result=$?
+    if [ ${pfx_result} -eq 0 ]
+    then
+      [ -s "${XML_SIGNED}" ] && rm -f "${XML_SIGNED}"
+      cd ${DIR_SCRIPT}
+      export CLASSPATH="bcprov-jdk16-137.jar:itext-2.0.4.jar:sign.class:."
+      java sign "${XML_CONTENT}" "${CERT}" "${PASSWORD}" "${XML_SIGNED}" >/dev/null
+      if [ $? == 0 ]
+      then
+        json "sucesso" "${XML_SIGNED}" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "XML Assinado" "${LOCALIZADOR}"
+        return 1
+      else
+        json "falha" "" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "JAVA -> Falha ao assinar o XML" "${LOCALIZADOR}"
+        return 0
+      fi
+      cd -
+    else
+			echo -e ${pfx_json}
+      exit 0
+    fi
+  else
+    json "falha" "${XML_SIGNED}" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "XML já foi assinado" "${LOCALIZADOR}"
+    return 0
+  fi
+}
+
+## FUNÇÃO: VERIFICAR SE O CERTIFICADO É VÁLIDO
+##
+## pfx_check /PATH/TO/CERTIFICADO.PFX SENHA LOCALIZADOR
+##
+## retorna 
+##	0 se certificado válido
+##	1 se certificado expirado
+##	2 se senha incorreta
+##	3 se localizador não informado
+##	4 se arquivo não for pfx
+##
+function pfx_check {
+  CERT="$1"
+  PASSWORD="$2"
+  LOCALIZADOR="$3"
+  JSON="${OUTPUT_DIR}/${LOCALIZADOR}.json"
+
+  if [ ! -s "${CERT}" ]
+  then
+    json "falha" "" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "O arquivo nao existe" "${LOCALIZADOR}"
+    return 0
+  fi
+
+  if [ ! ${CERT: -4} == ".pfx" ]
+  then
+    json "falha" "${CERT}" "" "" "" "O arquivo deve ser um PFX" "${LOCALIZADOR}"
+    return 4
+  fi
+
+  if [ ${#LOCALIZADOR} -eq 0 ]
+  then
+    json "falha" "${CERT}" "" "" "" "O localizador não foi informado" "localizador_nao_informado"
+    return 3
+  fi
+
+	invalid_password=`openssl pkcs12 -in "${CERT}" -nokeys -passin pass:"${PASSWORD}" 2>&1 | fgrep -c invalid\ password`
+
+	if [ ${invalid_password} -gt 0 ]
+	then
+    json "falha" "${CERT}" "" "" "" "Senha incorreta" "${LOCALIZADOR}"
+		return 2
+	fi
+
+  expiration_date=`openssl pkcs12 -in "${CERT}" -nokeys -passin pass:"${PASSWORD}" | openssl x509 -noout -enddate | cut -d= -f2`
+  expiration_date_ts=`date -d "${expiration_date}" +%s`
+  current_ts=`date +%s`
+
+  pfx_owner "${CERT}" "${PASSWORD}"
+
+  if [ $((${expiration_date_ts})) -gt $((${current_ts})) ]
+  then
+    json "sucesso" "${CERT}" "`date -d \"${expiration_date}\" ${FMT_DATE}`" "${nome}" "${doc}" "Certificado Ok" "${LOCALIZADOR}"
+    return 0
+  else
+    json "falha" "${CERT}" "`date -d \"${expiration_date}\" ${FMT_DATE}`" "${nome}" "${doc}" "Certificado expirado" "${LOCALIZADOR}"
+    return 1
+  fi
+}
+
+## FUNÇÃO: EXTRAIR O NOME E DOCUMENTO DO CERTIFICADO
+##
+## pfx_owner CERT PASSWORD
+##
+## GRAVA AS VARIÁVEIS nome E doc
+##
+function pfx_owner {
+  CERT="$1"
+  PASSWORD="$2"
+
+  if [ ! -s "${CERT}" ]
+  then
+    json "falha" "" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "O arquivo nao existe" "${LOCALIZADOR}"
+    exit 1
+  fi
+
+  if [ ! ${CERT: -4} == ".pfx" ]
+  then
+    echo "O certificado deve ser .pfx"
+    exit 1
+  fi
+
+  CN=`openssl pkcs12 -in "${CERT}" -passin pass:"${PASSWORD}" -clcerts -nokeys -out - | head -n 5 | grep 'CN =' | sed -n 1p`
+
+  nome=`echo ${CN} | sed -E -n 's/.*CN = ([[:print:]]*):([0-9]*)/\1/p'`
+  doc=`echo ${CN} | sed -E -n 's/.*CN = ([[:print:]]*):([0-9]*)/\2/p'`
+}
+
+function json {
+  status="$1"
+  pathArquivoAssinado="$2"
+  dataHoraAssinatura="$3"
+  certificadoNome="$4"
+  certificadoDocumento="$5"
+  erroMensagem="$6"
+  localizador="$7"
+
+  JSON="${OUTPUT_DIR}/${localizador}.json"
+
+	# Obrigatorio uso exclusivo de TABS 
+  tee "${JSON}" <<-EOF
+	{
+		"status": "${status}",
+		"pathArquivoAssinado": "${pathArquivoAssinado}",
+		"dataHoraAssinatura": "${dataHoraAssinatura}",
+		"certificadoDocumento": "${certificadoDocumento}",
+		"certificadoNome": "${certificadoNome}",
+		"erroMensagem": "${erroMensagem}"
+	}
+	EOF
+}
+
+#######################
+## EXECUÇÃO
+###################
+
+# Exibir ajuda se não inserir argumentos
+if [ "$#" == 0 ] || [ "${1::1}" != "-" ]
+then
+  help
+  exit 0
+fi
+
+# Lista de argumentos válidos
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case "$key" in
+    -h|--help)
+    help
+    shift
+    ;;
+    -s|--sign)
+    [ "$#" != 5 ] && help && exit 0
+    xml_sign "$2" "$3" "$4" "$5" 2>/dev/null
+    exit $?
+    shift 5
+    ;;
+    -x|--pfx)
+    [ "$#" != 4 ] && help && exit 0
+    pfx_check "$2" "$3" "$4" 2>/dev/null
+    exit $?
+    shift 4
+    ;;
+    *)
+    echo "Opção inválida '$key'"
+    help
+    exit 0
+    ;;
+  esac
+done
+
+exit 0
