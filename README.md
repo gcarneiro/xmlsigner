@@ -18,23 +18,13 @@ OpenSSL 1.1.1b  26 Feb 2019
 
 ### INSTALAÇÃO: 
 
-#### Faça o download dos arquivos
-
-Caso já tenha feito o download dos arquivos e deseje apenas sincronizar aqui com o `gitbub` faça:
-
-```
-cd /usr/local/bin/xmlsigner
-git pull origin master
-```
-
 #### Baixando pela 1ª vez:
 
-O diretório de instalação será `/usr/local/bin/xmlsigner`
+Você pode instalar esse script em qualquer lugar. Para realizar a instalação clone o repositório
 
 Execute:
 
 ```
-cd /usr/local/bin
 git clone https://github.com/gcarneiro/xmlsigner.git
 cd xmlsigner
 chmod +x xmlsigner
@@ -48,21 +38,3 @@ rm sign.class
 apt install build-essential
 make
 ```
-
-#### Configurações
-
-No arquivo `/home/usuário/.bashrc` de cada usuário insira a linha:
-
-```
-export PATH=/usr/local/bin/xmlsigner:$PATH
-```
-
-No arquivo `/etc/skel/.bashrc` insira a linha no final:
-
-```
-if [ -d "/usr/local/bin/xmlsigner" ] ; then
-    PATH=/usr/local/bin/xmlsigner:$PATH
-fi
-```
-
-E assim sendo terá o comando `xmlsigner` disponível na linha de comando.
