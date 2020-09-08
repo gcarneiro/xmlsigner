@@ -61,33 +61,27 @@ function xml_sign {
     return 0
   fi
 
-  if [ ! -s "${XML_SIGNED}" ]
-  then
-    pfx_json=`pfx_check "${CERT}" "${PASSWORD}" "${LOCALIZADOR}"`
-    pfx_result=$?
-    if [ ${pfx_result} -eq 0 ]
-    then
-      [ -s "${XML_SIGNED}" ] && rm -f "${XML_SIGNED}"
-      cd ${DIR_SCRIPT}
-      export CLASSPATH="bcprov-jdk16-137.jar:itext-2.0.4.jar:sign.class:."
-      java sign "${XML_CONTENT}" "${CERT}" "${PASSWORD}" "${XML_SIGNED}" >/dev/null
-      if [ $? == 0 ]
-      then
-        json "sucesso" "${XML_SIGNED}" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "XML Assinado" "${LOCALIZADOR}"
-        return 1
-      else
-        json "falha" "" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "JAVA -> Falha ao assinar o XML" "${LOCALIZADOR}"
-        return 0
-      fi
-      cd -
-    else
+	pfx_json=`pfx_check "${CERT}" "${PASSWORD}" "${LOCALIZADOR}"`
+	pfx_result=$?
+	if [ ${pfx_result} -eq 0 ]
+	then
+		[ -s "${XML_SIGNED}" ] && rm -f "${XML_SIGNED}"
+		cd ${DIR_SCRIPT}
+		export CLASSPATH="bcprov-jdk16-137.jar:itext-2.0.4.jar:sign.class:."
+		java sign "${XML_CONTENT}" "${CERT}" "${PASSWORD}" "${XML_SIGNED}" >/dev/null
+		if [ $? == 0 ]
+		then
+		json "sucesso" "${XML_SIGNED}" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "XML Assinado" "${LOCALIZADOR}"
+		return 1
+		else
+		json "falha" "" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "JAVA -> Falha ao assinar o XML" "${LOCALIZADOR}"
+		return 0
+		fi
+		cd -
+	else
 			echo -e ${pfx_json}
-      exit 0
-    fi
-  else
-    json "falha" "${XML_SIGNED}" "`eval ${CMD_DATE}`" "${nome}" "${doc}" "XML já foi assinado" "${LOCALIZADOR}"
-    return 0
-  fi
+		exit 0
+	fi
 }
 
 ## FUNÇÃO: VERIFICAR SE O CERTIFICADO É VÁLIDO
