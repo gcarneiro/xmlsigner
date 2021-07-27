@@ -20,15 +20,23 @@ OpenSSL 1.1.1b  26 Feb 2019
 
 #### Baixando pela 1ª vez:
 
-Você pode instalar esse script em qualquer lugar. Para realizar a instalação clone o repositório
+O diretório de instalação deve ser /usr/local/bin/pdfsigner para que seja possível a execução normal
 
 Execute:
 
 ```
+cd /usr/local/bin/
 git clone https://github.com/gcarneiro/xmlsigner.git
 cd xmlsigner
 chmod +x xmlsigner
 ```
+
+Após a instalação vamos criar um link simbolico para que qualquer usuário possa utilizar
+
+```
+ln -s /usr/local/bin/xmlsigner/xmlsigner /usr/bin/xmlsigner
+```
+
 
 #### Se precisar compilar o script em Java execute:
 
